@@ -13,6 +13,39 @@ Dashboard -> Lab briefing -> Target environment -> Recon -> Challenges -> Flag s
 
 **5 labs · 28 challenges · 5,000 XP · 13 concept cards · local progress persistence**
 
+---
+
+## Quick start
+
+```bash
+cd trilab
+npm install
+npm run dev
+```
+
+Open http://localhost:3000.
+
+### Deploy to Vercel (60 seconds, no account sharing needed)
+
+The fastest route — open a new PowerShell window and run:
+
+```bash
+cd D:\trilab
+npx vercel@latest --prod
+```
+
+The CLI will print a login link in your browser. Approve it there. When prompted for a project name
+press Enter, then confirm the deploy. Vercel prints a public URL at the end — that is your link.
+
+> **Never paste your GitHub password, personal access token, or Vercel token into a chat window
+> or into this project.** The Vercel CLI's browser login means no secret ever passes through the
+> project files, your shell history, or an AI assistant. If a deployment needs a token, create one
+> at vercel.com/account/tokens with the minimum scope (`vercel:deploy`) and revoke it afterwards.
+
+Alternatively, push to GitHub yourself and import the repo at vercel.com/new — Vercel builds and
+deploys automatically, and you get a link immediately. See "Deployment to Vercel" below.
+
+
 
 ---
 
