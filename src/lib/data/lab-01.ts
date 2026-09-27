@@ -1,0 +1,243 @@
+import type { Lab } from "@/lib/types";
+import digests from "@/lib/data/flag-digests.json";
+
+const D = digests as Record<string, string>;
+
+export const lab01: Lab = {
+  id: "lab-01",
+  number: 1,
+  title: "The Locked Door",
+  codename: "LOGIN",
+  tagline: "Authentication weaknesses, input handling and query construction",
+  difficulty: 2,
+  difficultyLabel: "Easy",
+  xpTotal: 1000,
+  target: "Northstar Employee Portal v2.4",
+  brief:
+    "A rushed migration replaced the legacy intranet. The dev team insists authentication is working normally. The security team is not convinced. Verify the claim with evidence.",
+  story: [
+    "Northstar Systems completed a rushed migration of its internal employee portal in January. The release notes say authentication was ported cleanly with no functional changes.",
+    "Two weeks after go-live, the security team receives an anonymous report: \"the login box does something strange with quotes.\" The development team responds that authentication is working normally and that this is probably user error.",
+    "You are a junior security researcher on the Northstar assessment team. Verify the vendor's claim with evidence, then explain in writing what went wrong and how it should be fixed.",
+    "Engagement rule: the target runs in a controlled training environment. Nothing you type reaches a real Northstar system.",
+  ],
+  objectives: [
+    "Observe how a login request is constructed and transmitted",
+    "Experiment with how input changes the authentication decision",
+    "Explain why string-built queries are dangerous",
+    "Recognise how credentials must be stored",
+    "Identify the root cause and recommend a real fix",
+  ],
+  concepts: [
+    { name: "Authentication", klass: "Access Control", coreIdea: "Proving who a user is before granting any access.", defense: "Strong password hashing, MFA, rate limiting, generic errors" },
+    { name: "SQL Injection", klass: "Injection", coreIdea: "Untrusted input changes the meaning of a query.", defense: "Parameterized queries / prepared statements" },
+    { name: "Password Storage", klass: "Cryptography", coreIdea: "Passwords must be stored as salted one-way hashes.", defense: "Argon2id, bcrypt or scrypt with a work factor" },
+  ],
+  terminals: ["login", "config/"],
+  terminal: "portal",
+  challenges: [
+    {
+      id: "L1C1",
+      labId: "lab-01",
+      index: 1,
+      codename: "RECON",
+      title: "Read the request",
+      description:
+        "Submit the login form once with any values, then read the request inspector. Identify the HTTP method the portal uses to submit credentials.",
+      objective: "What HTTP method carries the login request?",
+      difficulty: "Easy",
+      type: "multiple-choice",
+      requiresEvidence: ["lab-01:login-attempt"],
+      hints: [
+        { level: 1, text: "Submit the form, then read the request inspector below the login box.", cost: 10 },
+        { level: 2, text: "Look at the first word of the request line in the inspector.", cost: 20 },
+        { level: 3, text: "Credentials travel in a body, so the method is not GET. The inspector shows POST.", cost: 30 },
+      ],
+      learning: {
+        what: "The login form sends POST /login with a form-encoded body containing username and password.",
+        why: "A POST body is is not placed in the URL, so it does not land in browser history, proxy logs or referrer headers the way a query string does.",
+        danger: "Sending credentials with GET leaks them into logs, caches and shared URLs. An authentication endpoint must never accept credentials in a URL.",
+        discovery: "Open developer tools, select the Network tab, submit the form and read the request line and payload.",
+        prevention: "Always use POST for credentials, enforce TLS, and never log request bodies on authentication routes.",
+        testing: "Verify the endpoint rejects GET, that bodies are not written to access logs, and that responses carry no cache-storage headers.",
+      },
+      code: {
+        language: "http",
+        vulnerable: "GET /login?username=alex&password=hunter2\n! credentials visible in URL, history and logs",
+        secure: "POST /login\nContent-Type: application/x-www-form-urlencoded\n\nusername=alex&password=****",
+        note: "Never place secrets in a URL.",
+      },
+      options: [
+        { id: "post", label: "POST", correct: true, rationale: "POST keeps credentials in the request body rather than the URL." },
+        { id: "get", label: "GET", correct: false, rationale: "GET would expose credentials in the URL." },
+        { id: "put", label: "PUT", correct: false, rationale: "PUT creates or replaces a resource; it is not a form submission." },
+        { id: "patch", label: "PATCH", correct: false, rationale: "PATCH performs partial updates on an existing resource." },
+      ],
+      flagDigest: D.L1C1,
+      xp: 100,
+    },
+    {
+      id: "L1C2",
+      labId: "lab-01",
+      index: 2,
+      codename: "INPUT BEHAVIOUR",
+      title: "Probe the input",
+      description:
+        "Try ordinary credentials first, then experiment with quotes and logical operators. The portal is simulated: no query is ever executed, but the training table shows you when your input has changed the authentication decision. When the simulation reports an altered condition, capture the flag it prints.",
+      objective: "Trigger the simulated injection response and capture its flag.",
+      difficulty: "Easy",
+      type: "flag",
+      requiresEvidence: ["lab-01:injection"],
+      hints: [
+        { level: 1, text: "Read the response when the condition is altered. It names the account it discovered.", cost: 10 },
+        { level: 2, text: "The response text contains a FLAG{...} token. Copy it exactly.", cost: 20 },
+        { level: 3, text: "Search the response panel for the string FLAG{ and copy to the closing brace.", cost: 30 },
+      ],
+      learning: {
+        what: "A username containing a quote and a logical operator makes the portal return success and name an account the learner never authenticated as.",
+        why: "The vulnerable design pastes input into a query template, so the quote closes the string literal and the rest of the input becomes query logic.",
+        danger: "An attacker can authenticate as any user, including administrators, without ever knowing a password. That is full account takeover.",
+        discovery: "Send a single quote and observe how the error changes, then try classic tautologies such as ' OR '1'='1 and note the behavioural difference.",
+        prevention: "Use parameterized queries, verify passwords with a modern hash comparison, and alert on repeated authentication failures.",
+        testing: "Submit payloads containing quotes, comments and tautologies; every one must be treated as a literal string and rejected as invalid credentials.",
+      },
+      code: {
+        language: "sql",
+        vulnerable:
+          "SELECT * FROM users\nWHERE username = '<submitted value>'\n  AND password = '<submitted value>'\n\n// the placeholders above are filled in by string concatenation",
+        secure: "SELECT id, password_hash, role\nFROM users\nWHERE username = ?\n  AND password_hash = ?",
+        note: "The placeholder is sent separately from the query text, so input can never become syntax.",
+      },
+      options: [],
+      flagDigest: D.L1C2,
+      xp: 150,
+    },
+    {
+      id: "L1C3",
+      labId: "lab-01",
+      index: 3,
+      codename: "THE LOGIC",
+      title: "Understand the logic",
+      description:
+        "Explain the mechanism rather than the symptom. Select every statement that correctly describes why changing the input can change the authentication decision.",
+      objective: "Which statements describe the underlying flaw?",
+      difficulty: "Medium",
+      type: "multiple-answer",
+      requiresEvidence: ["lab-01:injection", "lab-01:schema"],
+      hints: [
+        { level: 1, text: "Focus on the word concatenation. Ask which part of the final string the developer actually controls.", cost: 10 },
+        { level: 2, text: "The flaw is not about password strength. It is about data being allowed to act as syntax.", cost: 20 },
+        { level: 3, text: "Correct set: the query is built by concatenation, input becomes syntax, and the fix is parameterization. Weak passwords, GET requests and a missing primary key are not the root cause.", cost: 30 },
+      ],
+      learning: {
+        what: "The handler builds SQL by concatenating request fields into a template, so untrusted data is parsed as query syntax.",
+        why: "SQL cannot distinguish a value the user typed from a fragment of a query the developer wrote once both are the same string.",
+        danger: "The same flaw usually extends to reading, modifying and deleting data, not just bypassing login.",
+        discovery: "Compare the intended query with the query that actually reaches the database when input contains a quote.",
+        prevention: "Parameterize every query, validate input as defence in depth, and prefer an ORM that parameterizes by default.",
+        testing: "Run a scanner that submits tautology and comment payloads to every endpoint; none should change the result set shape.",
+      },
+      code: {
+        language: "text",
+        vulnerable: "// The developer owns the template AND the values\nquery = \"SELECT * FROM users WHERE username='\" + username + \"' AND password='\" + password + \"'\"\ndb.exec(query)",
+        secure: "// The developer owns only the template\nstmt = db.prepare('SELECT id FROM users WHERE username = ? AND password_hash = ?')\nrow = stmt.get(username, hash)",
+        note: "Separate code from data. That is the whole idea.",
+      },
+      options: [
+        { id: "concat", label: "The query is assembled by string concatenation, so input becomes part of the query text.", correct: true },
+        { id: "syntax", label: "Untrusted input is parsed as SQL syntax rather than treated as a value.", correct: true },
+        { id: "param", label: "The fix is to send query text and values separately using placeholders.", correct: true },
+        { id: "weakpw", label: "The root cause is that Northstar users have weak passwords.", correct: false },
+        { id: "get", label: "The root cause is that the form uses POST instead of GET.", correct: false },
+        { id: "noschema", label: "The root cause is that the users table has no primary key.", correct: false },
+      ],
+      flagDigest: D.L1C3,
+      xp: 200,
+    },
+    {
+      id: "L1C4",
+      labId: "lab-01",
+      index: 4,
+      codename: "DATABASE RECON",
+      title: "Inspect the schema",
+      description:
+        "Run `schema` in the terminal (or open the schema panel) to see the simulated users table. Decide which column must never hold a plaintext password, and then capture the flag printed by the schema inspector.",
+      objective: "Identify the column that must never store plaintext, and record the inspector's flag.",
+      difficulty: "Medium",
+      type: "flag",
+      requiresEvidence: ["lab-01:schema"],
+      hints: [
+        { level: 1, text: "A column named password_hash already exists in the schema. That is the intended design.", cost: 10 },
+        { level: 2, text: "The schema inspector prints a flag once you have read the whole schema.", cost: 20 },
+        { level: 3, text: "The dangerous column is a plain `password` column. Read the inspector output and copy the FLAG{...} token.", cost: 30 },
+      ],
+      learning: {
+        what: "The users table has a password_hash column (bcrypt). A design that also carried a plaintext password column, or that stored the raw password, would be catastrophic.",
+        why: "Passwords must be stored as a one-way salted hash so that a database disclosure does not immediately become a credential breach everywhere else.",
+        danger: "Plaintext or reversibly-encrypted passwords let a single database read compromise every user, and users reuse passwords elsewhere.",
+        discovery: "Read the schema, the migration notes and any config in scope; column names and migration artefacts often reveal legacy storage decisions.",
+        prevention: "Store only Argon2id, bcrypt or scrypt hashes with a per-user salt, and migrate any existing plaintext immediately with a forced reset.",
+        testing: "Confirm no column or backup contains a reversible password, that hashes are salted and unique, and that the work factor meets policy.",
+      },
+      code: {
+        language: "text",
+        vulnerable: "password        varchar(128)   -- raw text, matches what the user typed",
+        secure: "password_hash   varchar(255)   -- bcrypt cost 12, unique salt per user",
+        note: "A hash of a password is not the password. You cannot reverse it, and you do not need to.",
+      },
+      options: [],
+      flagDigest: D.L1C4,
+      xp: 250,
+    },
+    {
+      id: "L1F",
+      labId: "lab-01",
+      index: 5,
+      codename: "FINAL",
+      title: "Root cause statement",
+      description:
+        "Write the finding the way you would in a real report: name the mechanism, not the symptom. With the schema and the injection behaviour in front of you, the assessment panel releases the final flag. Submit it to close the investigation.",
+      objective: "State the root cause in one sentence, then submit the final flag.",
+      difficulty: "Hard",
+      type: "flag",
+      requiresEvidence: ["lab-01:injection", "lab-01:schema", "lab-01:login-attempt"],
+      hints: [
+        { level: 1, text: "Name the mechanism, not the symptom. The symptom is 'login bypassed'.", cost: 10 },
+        { level: 2, text: "The mechanism is how the query is built. Ask what the developer should have done instead.", cost: 20 },
+        { level: 3, text: "The final flag is printed in the assessment panel once you have completed the schema and injection steps. Search the panel for FLAG{.", cost: 30 },
+      ],
+      learning: {
+        what: "The root cause is unsafe query construction: untrusted input is concatenated into SQL, so authentication logic can be rewritten by the caller.",
+        why: "The team migrated the code and retested the happy path only, so the injection surface survived a supposedly behaviour-preserving change.",
+        danger: "Any account can be taken over, including administrator accounts, and the same flaw usually permits direct data access.",
+        discovery: "Probe every input that reaches a query, start with quote characters, and compare behaviour between normal and crafted input.",
+        prevention: "Parameterized queries everywhere, hashed passwords, MFA, rate limiting and logging of failed authentication attempts as a second layer.",
+        testing: "Re-run the injection suite after the fix and confirm payloads are treated as literal strings; add the payloads as permanent regression tests.",
+      },
+      code: {
+        language: "text",
+        vulnerable: "// Root cause: code and data share one string\nconst query = `SELECT * FROM users WHERE username='${u}' AND password='${p}'`\ndb.query(query)",
+        secure: "// Fix: the query is fixed text; values travel separately\nconst row = db\n  .prepare('SELECT id, role FROM users WHERE username = ? AND password_hash = ?')\n  .get(u, verify(p, row.password_hash))",
+        note: "Parameterization is the fix. Validation is a bonus, not a substitute.",
+      },
+      options: [],
+      flagDigest: D.L1F,
+      xp: 300,
+    },
+  ],
+  writeUp: {
+    overview:
+      "Northstar's employee portal builds its login lookup by pasting the submitted username and password directly into a database query. A crafted username can therefore rewrite the query's own logic and authenticate as any account, including administrators.",
+    concept:
+      "SQL injection is a class of bug where data is mistaken for code. When untrusted input is concatenated into a query, the input changes the query's meaning instead of just its values. The fix is not filtering - it is separating code from data.",
+    solution:
+      "A username of alex' OR '1'='1 closes the string literal early and appends a condition that is true for every row. The query returns a user, the handler issues a session, and the password is never actually checked. The learning simulation recognises this pattern and replays a canned response so you can see the decision change without any real database being involved.",
+    whyItWorks:
+      "The handler treats the request body as a template and lets the caller supply the operators, quotes and comment markers the template was supposed to own. The database cannot tell the difference between a value and a fragment, because at that point they are the same characters.",
+    remediation:
+      "Use parameterized queries so the database receives query text and values separately. Store passwords as salted hashes (Argon2id, bcrypt or scrypt), never compare them as strings, add rate limiting and MFA, and log failed authentication attempts so automated abuse is visible.",
+    realWorld:
+      "Login forms are the most targeted endpoint on the internet. Automated credential stuffing and injection are constant, so this class of bug still surfaces regularly in assessments of mature codebases - especially in code inherited through migrations that were tested on the happy path only.",
+    flag: "FLAG{PARAMETERIZED_QUERIES_SAVE_LOGINS}",
+  },
+};
