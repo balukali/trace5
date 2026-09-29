@@ -12,6 +12,10 @@ next-env.d.ts
 # Local analysis notes (not part of the project)
 ANALYSIS.md
 
+# Cloudflare quick-tunnel logs and generated hostnames
+/.tunnels
+.tunnels-run.log
+
 # Plaintext flag authoring source. This is the human-readable list of every
 # answer; only the digests in src/lib/data/flag-digests.json are meant to ship.
 # It stays local (or in a separate private repo) so the answers are not

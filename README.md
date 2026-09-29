@@ -349,6 +349,42 @@ client-side, so there is nothing else to configure.
 
 ---
 
+## Publishing with a Cloudflare Tunnel
+
+`scripts/cloudflare-tunnels.ps1` publishes the running containers over the
+internet through Cloudflare quick tunnels, so no router configuration, port
+forwarding or public IP is needed.
+
+```powershell
+# containers must be running first
+docker compose up -d
+
+# start a tunnel per container
+.\scripts\cloudflare-tunnels.ps1
+
+# read the URLs back later
+.\scripts\cloudflare-tunnels.ps1 -Action Status
+
+# stop every tunnel
+.\scripts\cloudflare-tunnels.ps1 -Action Stop
+```
+
+Each container gets its own hostname, so a single challenge can be shared on its
+own link while the hub exposes the whole platform. The lab containers redirect
+their root to their own lab. URLs are written to `.tunnels/urls.txt`.
+
+The script passes `--protocol http2` explicitly. Some networks block outbound
+QUIC (UDP 7844), and without that flag cloudflared allocates a hostname and then
+retries QUIC forever, so every request returns **HTTP 530** even though the tunnel
+"looks" like it started. If you see 530, that is the cause.
+
+These are account-less quick tunnels: the hostname is random and changes on every
+restart, and anyone who has the link can reach the app. For a stable hostname, or
+to put the app behind Cloudflare Access, create a named tunnel instead and point
+it at the same local ports.
+
+---
+
 ## Flag submission and feedback
 
 **`/submit` — CTFd-style flag console.** Paste any captured flag and it is matched
