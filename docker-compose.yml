@@ -1,19 +1,51 @@
-# TRACE//5 — local run
+# TRACE//5 — all five challenges, one command
 #
-#   docker compose up -d --build     start on http://localhost:3000
-#   docker compose logs -f app       tail logs
-#   docker compose down              stop
-#   docker compose down -v           stop and delete the volume
+#   docker compose up -d --build     start everything
+#   docker compose ps                see all containers
+#   docker compose logs -f lab-01    tail one challenge
+#   docker compose down              stop everything
 #
-# No environment variables, database or external services are required.
+# Every container runs the same image. The TRACE5_LAB variable pins a container
+# to one lab, so each challenge gets its own address:
+#
+#   hub      http://localhost:3000   the full platform, all 5 labs
+#   lab-01   http://localhost:3001   authentication flaws
+#   lab-02   http://localhost:3002   IDOR / BOLA
+#   lab-03   http://localhost:3003   XSS
+#   lab-04   http://localhost:3004   path traversal
+#   lab-05   http://localhost:3005   API security
+#
+# The lab containers redirect their root to their own lab, but every route
+# works, so /labs, /dashboard and /concepts are reachable from any of them.
+#
+# No environment variables beyond TRACE5_LAB are needed, and no database or
+# external service is involved.
+
+x-lab: &lab
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: trace5:latest
+  restart: unless-stopped
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
 
 services:
-  app:
+  # The whole platform on one port.
+  hub:
     build:
       context: .
       dockerfile: Dockerfile
     image: trace5:latest
-    container_name: trace5
+    container_name: trace5-hub
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
@@ -27,3 +59,49 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # One container per challenge, each pinned to its own lab.
+  lab-01:
+    <<: *lab
+    container_name: trace5-lab-01
+    environment:
+      NODE_ENV: production
+      TRACE5_LAB: lab-01
+    ports:
+      - "127.0.0.1:3001:3000"
+
+  lab-02:
+    <<: *lab
+    container_name: trace5-lab-02
+    environment:
+      NODE_ENV: production
+      TRACE5_LAB: lab-02
+    ports:
+      - "127.0.0.1:3002:3000"
+
+  lab-03:
+    <<: *lab
+    container_name: trace5-lab-03
+    environment:
+      NODE_ENV: production
+      TRACE5_LAB: lab-03
+    ports:
+      - "127.0.0.1:3003:3000"
+
+  lab-04:
+    <<: *lab
+    container_name: trace5-lab-04
+    environment:
+      NODE_ENV: production
+      TRACE5_LAB: lab-04
+    ports:
+      - "127.0.0.1:3004:3000"
+
+  lab-05:
+    <<: *lab
+    container_name: trace5-lab-05
+    environment:
+      NODE_ENV: production
+      TRACE5_LAB: lab-05
+    ports:
+      - "127.0.0.1:3005:3000"

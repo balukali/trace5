@@ -636,7 +636,17 @@ check("no child_process import in src", !/import\s+.*\bchild_process\b/.test(all
 check("no exec/spawn call in src", !/^\s*(const|let|var|await|return)?\s*\b(exec|execSync|spawn|spawnSync)\s*\(/m.test(allSource));
 check("no dangerouslySetInnerHTML usage in src", !/<[a-z]+\s+dangerouslySetInnerHTML/.test(allSource));
 check("no fs import in src", !/import\s+.*from\s+["'](node:)?fs["']/.test(allSource));
-check("no process.env access in src", !/process\.env/.test(allSource));
+// process.env must never be read by client or app code. The single allowed
+// exception is src/middleware.ts, which runs on the server and only uses it to
+// pin a per-lab container (TRACE5_LAB).
+const envReadingFiles = allFiles.filter(
+  (f) => !f.endsWith(join(sep, "middleware.ts")) && /process\.env/.test(readFileSync(f, "utf8")),
+);
+check(
+  "no process.env access in src (middleware exempt)",
+  envReadingFiles.length === 0,
+  envReadingFiles.map((f) => f.replace(root, "")).join(", "),
+);
 check("no database client imported in src", !/from\s+["'](prisma|drizzle|mongoose|knex|pg|mysql2)/.test(allSource));
 check("no outbound fetch to a real host", !/fetch\(\s*["'`]https?:/.test(allSource));
 check("no Vercel tokens in src", !/vercel[_-]?token|VERCEL_TOKEN/i.test(allSource));
