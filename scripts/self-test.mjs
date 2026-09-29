@@ -110,7 +110,7 @@ const ids = Object.keys(digests);
 if (!hasAuthoringFile) {
   console.log("      (scripts/flags.json absent - local authoring file is gitignored)");
 }
-check("28 digests shipped", ids.length === 28, `got ${ids.length}`);
+check("29 digests shipped", ids.length === 29, `got ${ids.length}`);
 check("every flag has a digest", ids.every((id) => typeof digests[id] === "string"));
 check("digests are unique", new Set(Object.values(digests)).size === ids.length);
 if (hasAuthoringFile) {
@@ -158,7 +158,7 @@ for (const f of labFiles) labs.push(Object.values(await load(f, { inlineJson: di
 
 check("5 labs loaded", labs.length === 5, `got ${labs.length}`);
 const challenges = labs.flatMap((l) => l.challenges);
-check("28 challenges total", challenges.length === 28, `got ${challenges.length}`);
+check("29 challenges total", challenges.length === 29, `got ${challenges.length}`);
 check("every lab has at least 5 challenges", labs.every((l) => l.challenges.length >= 5));
 check(
   "every lab totals 1000 XP",
@@ -191,9 +191,11 @@ check(
   "hint costs increase",
   challenges.every((c) => c.hints.every((h, i) => (i === 0 ? true : h.cost > c.hints[i - 1].cost))),
 );
+// Costs are a flat 10/20/30 for the guided labs. Expert-tier challenges cost
+// more because their hints give away more, so the rule is a floor, not a formula.
 check(
-  "hint costs are 10/20/30",
-  challenges.every((c) => c.hints.slice(0, 3).every((h, i) => h.cost === (i + 1) * 10)),
+  "hint costs are at least 10/20/30",
+  challenges.every((c) => c.hints.slice(0, 3).every((h, i) => h.cost >= (i + 1) * 10)),
 );
 check(
   "no hint leaks its own challenge's flag",
@@ -470,6 +472,39 @@ check("event handler detected", scriptish.attributes.some((a) => a.includes("one
 check("escaped output neutralises angle brackets", bold.escaped.includes("&lt;"));
 check("escaped output neutralises quotes", xss.analyzeSearchTerm('" onload="x').escaped.includes("&quot;"));
 check("stored review payload is classified as script", xss.STORED_REVIEW.classification === "script");
+
+// Filter-bypass engine. The point of these assertions is that the *naive
+// filter is defeated by real payloads*, and that the families are identified,
+// so the expert challenge stays solvable by reasoning rather than guesswork.
+const plain = xss.analyzeBypass("laptop");
+check("plain input exercises no bypass family", plain.families.includes("none"));
+check("plain input is not a bypass", plain.bypasses === false);
+
+const direct = xss.analyzeBypass("<script>alert(1)</script>");
+check("a plain script block is removed by the filter", direct.afterFilter === "");
+check("a plain script block does not bypass", direct.bypasses === false);
+
+const entity = xss.analyzeBypass("<img src=&#106;avascript:alert(1)>");
+check("entity-encoded scheme is identified", entity.families.includes("entity"));
+check("entity-encoded scheme bypasses the filter", entity.bypasses === true);
+
+const split = xss.analyzeBypass("<img src=java\tscript:alert(1)>");
+check("tab-split scheme is identified", split.families.includes("split"));
+check("tab-split scheme bypasses the filter", split.bypasses === true);
+
+// The headline bypass: the filter deletes the inner <script> run and the
+// characters on either side of it rejoin into a working tag.
+const reassembly = xss.analyzeBypass("<scri<script>pt>alert(1)</scri</script>pt>");
+check("reassembly bypass is identified", reassembly.families.includes("replacement"));
+check("reassembly bypasses the filter", reassembly.bypasses === true);
+check("reassembly yields a live script tag", /<\s*script/i.test(reassembly.afterFilter));
+
+const mixedCase = xss.analyzeBypass("<ScRiPt>alert(1)</ScRiPt>");
+check("case obfuscation is identified", mixedCase.families.includes("case"));
+check("case obfuscation is still removed by this filter", mixedCase.bypasses === false);
+
+const handler = xss.analyzeBypass("<img src=x onerror=alert(1)>");
+check("a stripped event handler is not a bypass", handler.bypasses === false);
 
 
 console.log("\n[7] Lab 04 â€” path traversal simulation");

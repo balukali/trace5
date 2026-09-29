@@ -11,7 +11,7 @@ Dashboard -> Lab briefing -> Target environment -> Recon -> Challenges -> Flag s
           -> Write-up -> Remediation -> Next lab
 ```
 
-**5 labs · 28 challenges · 5,000 XP · 13 concept cards · local progress persistence**
+**5 labs · 29 challenges · 5,000 XP · 13 concept cards · local progress persistence**
 
 ---
 
@@ -146,7 +146,7 @@ By the end of the range you should be able to:
 ## Features
 
 - **5 progressive labs**, beginner → intermediate, each with a realistic engagement scenario
-- **28 challenges** across multiple-choice, multi-answer, flag, evidence-gated and free-text report types
+- **29 challenges** across multiple-choice, multi-answer, flag, evidence-gated and free-text report types
 - **Simulated targets**: a login portal, an invoice API, a feedback search page, a document browser, a customer API
 - **Simulated HTTP request inspector** in every lab so you can read real request/response shapes
 - **Simulated terminal** (whitelist parser — never a shell) available in every lab
@@ -200,7 +200,7 @@ comparison, options, XP, and flag digest — lives in `src/lib/data/lab-0*.ts`. 
 `ctf-engine.ts` is generic: it reads a `Challenge` and returns a verdict. Adding a lab means adding
 data, not writing new UI.
 
-**Scores.** 28 challenges distribute 1,000 XP per lab (5,000 total). Hints cost 10/20/30 XP, walkthroughs
+**Scores.** 29 challenges distribute 1,000 XP per lab (5,000 total). Hints cost 10/20/30 XP (25/40/60 on expert-tier challenges), walkthroughs
 cost 50 XP, and XP never drops below zero.
 
 - **Accessible**: semantic HTML, focus rings, ARIA live regions, no colour-only status indicators
@@ -349,13 +349,36 @@ client-side, so there is nothing else to configure.
 
 ---
 
+## Flag submission and feedback
+
+**`/submit` — CTFd-style flag console.** Paste any captured flag and it is matched
+against every challenge you have not solved yet, so you do not have to know which
+challenge it belongs to. A correct flag is accepted, the challenge is marked
+solved, and the same XP is awarded as inside the lab — including any hint and
+walkthrough deductions. A rejected flag reports only that nothing matched; it
+never discloses which challenge the submission was tested against, and never
+reveals any part of the correct answer.
+
+The page also lists every challenge with its solve state, difficulty, attempt
+count and a search box, with solved/unsolved filters. Attempt counts live in a
+separate `localStorage` key so they can be tallied before a challenge is solved.
+
+**Verdict audio.** A correct flag plays a short rising two-tone chime; a wrong one
+plays a descending buzz. Both are synthesised at runtime with the Web Audio API,
+so there is no audio asset to download and nothing extra in the bundle. Browsers
+block audio until the page has been interacted with, which is why playback is
+triggered from the submit handler. Every audio code path is wrapped so a failure
+can never break a submission.
+
+---
+
 ## Testing checklist
 
 | Area | Covered |
 |---|---|
 | Dashboard | XP, stats, per-lab progress, concept unlocks, resume flow |
 | All 5 labs | Briefing, target simulator, challenges, evidence, write-up |
-| All 28 challenges | Correct answers, incorrect answers, evidence gating |
+| All 29 challenges | Correct answers, incorrect answers, evidence gating |
 | Hints | 3 per challenge, sequential unlock, XP deduction, confirmation dialog |
 | XP | Awards, deductions, zero floor, walkthrough cost |
 | Flags | Digest verification, case-insensitivity, incorrect-flag feedback |

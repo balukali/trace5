@@ -4,6 +4,8 @@ import * as React from "react";
 import { Check, Lightbulb, Lock, Send, X, BookOpen, Award, Terminal } from "lucide-react";
 import type { Challenge } from "@/lib/types";
 import { validateSubmission, type SubmissionValue, type Verdict } from "@/lib/ctf-engine";
+import { playCorrectSound, playWrongSound } from "@/lib/verdict-audio";
+import { registerAttempt } from "@/lib/attempt-log";
 import { progressStore } from "@/lib/progress-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +92,13 @@ export function ChallengePanel({
     });
     setVerdict(result);
     setAttempts((a) => a + 1);
+    registerAttempt(challenge.id);
+
+    if (result.status === "correct") {
+      playCorrectSound();
+    } else {
+      playWrongSound();
+    }
 
     if (result.status === "correct" && !solved) {
       const previous = progressStore.getState().solved[challenge.id];

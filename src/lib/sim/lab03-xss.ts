@@ -23,6 +23,160 @@ export interface AnalysisResult {
   interpretation: string[];
   classification: "plain" | "markup" | "attribute" | "script";
   evidence?: string;
+  /** Advanced bypass analysis (see analyzeBypass). */
+  bypass?: BypassResult;
+}
+
+/**
+ * ADVANCED: filter-bypass analysis.
+ *
+ * A naive blocklist that removes the literal substrings `<script` and `onerror`
+ * is trivially defeated. This models the three real bypass families a learner
+ * has to reason about:
+ *
+ *   1. case / whitespace obfuscation   - `<ScRiPt>`, `<script >`
+ *   2. entity and encoding tricks      - `&#106;avascript:`, tab/newline splits
+ *   3. replacement-pattern sanitizer  - `String.replace(/x/g, '')` re-inserting the
+ *                                       match via the `$&` token, so removing
+ *                                       the payload rebuilds it
+ *
+ * Nothing is executed. The result is a description of what a vulnerable page
+ * would have done, which is what makes the challenge solvable by reasoning.
+ */
+export interface BypassResult {
+  /** Which families the input exercised. */
+  families: Array<"case" | "whitespace" | "entity" | "split" | "replacement" | "none">;
+  /** Normalised form after the naive filter ran. */
+  afterFilter: string;
+  /** True when the naive filter would still be bypassed. */
+  bypasses: boolean;
+  /** What a vulnerable renderer would finally execute. */
+  effective: string;
+  notes: string[];
+}
+
+/**
+ * The naive filter a rushed page actually ships: remove complete <script> blocks
+ * and the two most common handler tokens, as literal strings. It reads as
+ * sanitisation but operates on text, not on structure.
+ *
+ * The HTML parser then sees the result and is tolerant of case, stray whitespace
+ * and embedded newlines. Because the filter deletes a whole `<script>...</script>`
+ * run, a payload that hides a script block *inside* the word it wants rebuilt -
+ * `<scri<script>pt>...</scri</script>pt>` - is reassembled into a working tag by
+ * the removal itself. That is the bypass.
+ */
+const NAIVE_BLOCKLIST = [
+  // A real "remove script tags" regex, written the way people actually write it.
+  /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
+  /\bon\w+\s*=/gi,
+  /\bjavascript\s*:/gi,
+];
+
+function applyNaiveFilter(input: string): string {
+  let out = input;
+  for (const pattern of NAIVE_BLOCKLIST) out = out.replace(pattern, "");
+  return out;
+}
+
+/**
+ * The single-pass filter a vulnerable page actually uses, modelled honestly:
+ * remove the literal token, then hand the result to the HTML parser. The parser
+ * is tolerant of case, stray whitespace and embedded newlines, so a payload
+ * only has to *survive* the string filter to be interpreted. Nested-tag tricks
+ * (removal re-inserting the token) are what defeat it.
+ */
+function survivesNaiveFilter(input: string): boolean {
+  const stripped = applyNaiveFilter(input);
+  const decoded = decodeEntities(stripped);
+  // Collapse the whitespace an HTML parser ignores inside tags and schemes.
+  const collapsed = decoded.replace(/[\t\n\r]/g, "");
+  return /<\s*script|on\w+\s*=|javascript\s*:/i.test(collapsed);
+}
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_m, code: string) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, code: string) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&colon;/gi, ":")
+    .replace(/&tab;/gi, "\t")
+    .replace(/&newline;/gi, "\n")
+    .replace(/&amp;/gi, "&");
+}
+
+export function analyzeBypass(raw: string): BypassResult {
+  const input = raw ?? "";
+  const families: BypassResult["families"] = [];
+
+  // 1. Case obfuscation: <ScRiPt> / <SCRIPT> defeats a case-sensitive blocklist.
+  //    Detected by finding a script tag whose own text is not all-lowercase.
+  const scriptTagMatch = /<\s*(\/?\s*script)/i.exec(input);
+  if (scriptTagMatch && /[A-Z]/.test(scriptTagMatch[1])) families.push("case");
+
+  // 2. Whitespace / newline inside the tag: <script >, <script\n>, < script>.
+  if (/<\s*script\s*[\n\r\t]/i.test(input) || /<\s+script/i.test(input)) {
+    families.push("whitespace");
+  }
+  if (/on\w+\s*=\s*[\n\r\t]|javascript\s*:\s*[\n\r\t]/i.test(input)) {
+    families.push("whitespace");
+  }
+
+  // 3. Numeric / named entity encoding inside a URI.
+  if (/&#x?[0-9a-f]+;|&colon;|&tab;|&newline;/i.test(input)) families.push("entity");
+
+  // 4. Split payloads: java\tscript: or java\nscript:
+  if (/java[\s\S]{0,3}script\s*:/i.test(input)) families.push("split");
+
+  // 5. Reassembly: the word "script" split by a nested tag - <scri<script>pt> -
+  //    so the filter deletes the inner token and glues the halves back together.
+  if (/<\s*scr\s*<\s*script|scri\s*<\s*script/i.test(input)) {
+    families.push("replacement");
+  }
+
+  if (families.length === 0) families.push("none");
+
+  const afterFilter = applyNaiveFilter(input);
+  const decoded = decodeEntities(afterFilter);
+  // Whitespace and newlines inside a tag or scheme are ignored by HTML parsers.
+  const collapsed = decoded.replace(/[\t\n\r]/g, "");
+  const effective = collapsed;
+  const bypasses = survivesNaiveFilter(input);
+
+  const notes: string[] = [];
+  if (families.includes("case")) {
+    notes.push(
+      "A case-sensitive blocklist does not match <ScRiPt>. Compare case-insensitively or allow-list instead.",
+    );
+  }
+  if (families.includes("whitespace")) {
+    notes.push(
+      "HTML parsers tolerate whitespace and newlines inside a tag, so '<script >' is still a script element.",
+    );
+  }
+  if (families.includes("entity")) {
+    notes.push(
+      "Numeric and named entities are decoded by the parser before the tag is built, so &#106;avascript: becomes javascript:.",
+    );
+  }
+  if (families.includes("split")) {
+    notes.push(
+      "A tab or newline inside the scheme is stripped before the URI is resolved, so java\\tscript: is still a javascript URI.",
+    );
+  }
+  if (families.includes("replacement")) {
+    notes.push(
+      "A sanitizer built on String.replace(/payload/g, '') rebuilds the payload when the match is re-inserted. Remove-and-reinsert is not sanitisation.",
+    );
+  }
+  if (bypasses) {
+    notes.push(
+      `After the naive filter the payload is still live: ${effective.slice(0, 80)}`,
+    );
+  } else if (families.includes("none")) {
+    notes.push("The naive filter removed everything recognisable, or the input was never a payload.");
+  }
+
+  return { families, afterFilter, bypasses, effective, notes };
 }
 
 function escapeHtml(value: string): string {

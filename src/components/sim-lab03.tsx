@@ -5,23 +5,30 @@ import {
   SIMULATED_REVIEWS,
   STORED_REVIEW,
   STORED_REVIEW_NOTES,
+  analyzeBypass,
   analyzeSearchTerm,
   type AnalysisResult,
+  type BypassResult,
 } from "@/lib/sim/lab03-xss";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { EvidenceFlag, RequestInspector } from "@/components/http-inspector";
+import { cn } from "@/lib/utils";
 
 const FLAG_MARKUP = "FLAG{INPUT_IS_DATA_NOT_CODE}";
 const FLAG_ENCODER = "FLAG{ENCODING_IS_THE_DEFENSE}";
 const FLAG_STORED = "FLAG{STORED_PERSISTS_BEYOND_THE_REQUEST}";
 const FLAG_FINAL = "FLAG{ESCAPE_OUTPUT_NOT_TRUST}";
 
+const FLAG_BYPASS = "FLAG{FILTER_IS_NOT_A_BOUNDARY}";
+
 const SAMPLES = ["laptop", "<b>test</b>", "<img src=x onerror=alert(1)>"];
 
 export function Lab03Sim({ onEvidence }: { onEvidence: (key: string) => void }) {
   const [term, setTerm] = React.useState("laptop");
   const [analysis, setAnalysis] = React.useState<AnalysisResult | null>(null);
+  const [bypass, setBypass] = React.useState<BypassResult | null>(null);
   const [encoderOpen, setEncoderOpen] = React.useState(false);
   const [storedViewed, setStoredViewed] = React.useState(false);
 
@@ -135,6 +142,108 @@ export function Lab03Sim({ onEvidence }: { onEvidence: (key: string) => void }) 
           )}
         </div>
       )}
+
+      <div className="panel p-5">
+        <h3 className="hud-label">Content filter (naive)</h3>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          This release shipped a filter that deletes complete{" "}
+          <code className="font-mono">&lt;script&gt;…&lt;/script&gt;</code> blocks plus{" "}
+          <code className="font-mono">on…=</code> handlers and{" "}
+          <code className="font-mono">javascript:</code> URIs, then renders the result. The filter
+          looks convincing. It is not a security boundary — a payload only has to survive the string
+          filter to be interpreted by the parser. The analysis below shows what survives and why.
+        </p>
+
+        <form
+          className="mt-3 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const b = analyzeBypass(term);
+            setBypass(b);
+            if (b.bypasses) onEvidence("lab-03:bypass");
+          }}
+        >
+          <label htmlFor="l3-filter" className="sr-only">
+            Test a payload against the content filter
+          </label>
+          <Input
+            id="l3-filter"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="payload to test against the filter"
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono"
+          />
+          <Button type="submit" className="sm:w-44">
+            Test the filter
+          </Button>
+        </form>
+
+        {bypass && (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-border bg-muted/40 p-3">
+                <p className="hud-label">After the filter</p>
+                <p className="mt-1.5 break-all font-mono text-[11px]">
+                  {bypass.afterFilter || "(empty — the filter removed everything)"}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "rounded-md border p-3",
+                  bypass.bypasses
+                    ? "border-rose-500/50 bg-rose-500/10"
+                    : "border-border bg-muted/40",
+                )}
+              >
+                <p className="hud-label">Parser verdict</p>
+                <p className="mt-1.5 font-mono text-[11px]">
+                  {bypass.bypasses
+                    ? "STILL LIVE — the filter was bypassed"
+                    : "Neutralised by the filter"}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="hud-label">Bypass families exercised</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {bypass.families.map((f) => (
+                  <Badge key={f} variant="outline" className="font-mono text-[11px]">
+                    {f}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {bypass.notes.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-[11px] text-muted-foreground">
+                {bypass.notes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            )}
+
+            {bypass.bypasses && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                <p className="hud-label text-amber-300">Filter bypassed</p>
+                <p className="mt-1.5 text-[11px] text-amber-100/90">
+                  A payload survived a filter that looked like it removed the dangerous part. Copy
+                  the bypass token below and submit it as the flag.
+                </p>
+                <div className="mt-2">
+                  <EvidenceFlag
+                    flag={FLAG_BYPASS}
+                    label="Filter bypass confirmed — the filter is not a control"
+                    tone="amber"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="panel p-5">
         <h3 className="hud-label">Encoder demonstration</h3>

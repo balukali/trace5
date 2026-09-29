@@ -193,7 +193,7 @@ export const lab03: Lab = {
         { id: "secret", label: "Rely on the value being non-sensitive, so rendering it is harmless.", correct: false },
       ],
       flagDigest: D.L3C4,
-      xp: 175,
+      xp: 75,
     },
     {
       id: "L3C5",
@@ -230,7 +230,65 @@ export const lab03: Lab = {
       },
       options: [],
       flagDigest: D.L3C5,
-      xp: 200,
+      xp: 100,
+    },
+    {
+      id: "L3C6",
+      labId: "lab-03",
+      index: 6,
+      codename: "FILTER BYPASS",
+      title: "Defeat the content filter",
+      description:
+        "The team patched the portal with a filter that deletes complete <script>…</script> blocks, on…= handlers and javascript: URIs before rendering. It looks like the hole is closed. It is not. Find a payload that survives the filter and is still interpreted as markup by the parser, then capture the token the target prints when it confirms the bypass.\n\nThe analysis panel shows you the string the filter produced and what the parser would still do with it. Nothing you type is ever executed.",
+      objective: "Produce a payload that survives the filter and still executes in a vulnerable renderer.",
+      difficulty: "Expert",
+      type: "flag",
+      requiresEvidence: ["lab-03:bypass"],
+      hints: [
+        {
+          level: 1,
+          text: "The filter deletes whole <script>…</script> runs. What happens to the characters on either side of the run it deletes?",
+          cost: 25,
+        },
+        {
+          level: 2,
+          text: "A parser is not a string comparison. Entities are decoded and stray whitespace is ignored before the tag is built.",
+          cost: 40,
+        },
+        {
+          level: 3,
+          text: "Try splitting a word the filter removes so the halves rejoin: <scri<script>pt> becomes <script> once the inner run is deleted. Or encode a colon as &#58;.",
+          cost: 60,
+        },
+      ],
+      learning: {
+        what: "A payload that survives a substring filter is still parsed as markup. Removing text is not the same as preventing structure.",
+        why: "The filter operates on a string. The HTML parser operates on a grammar. They are different layers, and anything that differs between them is an attack surface — entity decoding, case folding, whitespace tolerance and reassembly after removal.",
+        danger: "Blocklist filters give a false sense of completion. Teams ship them believing the class of bug is closed, and attackers walk straight through with a variant nobody thought to block.",
+        discovery: "Read what the filter produces, not what you typed. The gap between the two strings is the whole vulnerability.",
+        prevention: "Encode on output, in the context you are rendering into, and never rely on removing substrings. If you must filter, allow-list the permitted constructs rather than denying known-bad ones — and never use a regex whose match can be re-inserted.",
+        testing: "Fuzz the filter with entity-encoded, case-varied, whitespace-split and nested variants of every blocked token. Every one must render as inert text.",
+      },
+      code: {
+        language: "text",
+        vulnerable:
+          "// " +
+          "vulnerable filter: deletes text, then hands the string to the parser\n" +
+          "out = input.replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script\\s*>/gi, '')\n" +
+          "     .replace(/\\bon\\w+\\s*=/gi, '')\n" +
+          "     .replace(/\\bjavascript\\s*:/gi, '');\n" +
+          "el.innerHTML = out;   // the parser rebuilds what the filter left behind",
+        secure:
+          "// secure: do not build markup from input at all\n" +
+          "el.textContent = input;\n" +
+          "// or, if markup is genuinely required, parse and allow-list the nodes:\n" +
+          "const doc = new DOMParser().parseFromString(input, 'text/html');\n" +
+          "// keep only the elements and attributes you explicitly permit, then re-serialise",
+        note: "Encoding at the sink is the only control that does not have to anticipate every parser quirk.",
+      },
+      options: [],
+      flagDigest: D.L3C6,
+      xp: 300,
     },
     {
       id: "L3F",
@@ -265,7 +323,7 @@ export const lab03: Lab = {
       },
       options: [],
       flagDigest: D.L3F,
-      xp: 250,
+      xp: 150,
     },
   ],
   writeUp: {

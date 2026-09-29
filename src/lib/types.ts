@@ -153,5 +153,5 @@ export interface SolvedRecord {
 export const XP_PER_LAB = 1000;
 export const XP_TOTAL = XP_PER_LAB * 5;
 
-/** Total number of challenges across all five labs (28). */
-export const TOTAL_CHALLENGES = 28;
+/** Total number of challenges across all five labs (29). */
+export const TOTAL_CHALLENGES = 29;

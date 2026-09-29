@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Terminal, Trophy, GraduationCap, LayoutDashboard, BookOpen } from "lucide-react";
+import { Menu, X, Terminal, Trophy, GraduationCap, LayoutDashboard, BookOpen, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProgress } from "@/lib/progress-context";
 import { XP_TOTAL } from "@/lib/types";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/labs", label: "Labs", icon: Terminal },
+  { href: "/submit", label: "Submit", icon: Flag },
   { href: "/concepts", label: "Concepts", icon: BookOpen },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/certificate", label: "Certificate", icon: GraduationCap },
