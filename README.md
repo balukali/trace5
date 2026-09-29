@@ -17,13 +17,52 @@ Dashboard -> Lab briefing -> Target environment -> Recon -> Challenges -> Flag s
 
 ## Quick start
 
-### With Docker (no Node.js needed)
+### All five challenges with Docker (no Node.js needed)
 
 ```bash
 docker compose up -d --build
 ```
 
-Open http://localhost:3000. Stop with `docker compose down`.
+This starts six containers from the one image:
+
+| Address | Container | Challenge |
+|---|---|---|
+| http://localhost:3000 | `trace5-hub` | the full platform, all 5 labs |
+| http://localhost:3001 | `trace5-lab-01` | authentication flaws |
+| http://localhost:3002 | `trace5-lab-02` | IDOR / BOLA |
+| http://localhost:3003 | `trace5-lab-03` | XSS |
+| http://localhost:3004 | `trace5-lab-04` | path traversal |
+| http://localhost:3005 | `trace5-lab-05` | API security |
+
+Each lab container redirects its root to its own lab, so opening
+`http://localhost:3003` takes you straight into lab 03. Every other route
+(`/labs`, `/dashboard`, `/concepts`, `/leaderboard`, `/certificate`) works from
+any container.
+
+```bash
+docker compose ps           # status of all six containers
+docker compose logs -f lab-01
+docker compose down         # stop everything
+```
+
+### Single container
+
+```bash
+docker compose up -d hub
+```
+
+Or without compose:
+
+```bash
+docker build -t trace5 .
+docker run --rm -p 3000:3000 trace5
+```
+
+To pin a single container to one lab, pass the variable yourself:
+
+```bash
+docker run --rm -e TRACE5_LAB=lab-04 -p 3000:3000 trace5
+```
 
 ### With Node.js
 
