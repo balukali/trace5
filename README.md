@@ -17,8 +17,20 @@ Dashboard -> Lab briefing -> Target environment -> Recon -> Challenges -> Flag s
 
 ## Quick start
 
+### With Docker (no Node.js needed)
+
 ```bash
-cd trilab
+docker compose up -d --build
+```
+
+Open http://localhost:3000. Stop with `docker compose down`.
+
+### With Node.js
+
+Requires Node.js 18.17+ (developed and verified on Node 24).
+
+```bash
+cd trace5
 npm install
 npm run dev
 ```
@@ -30,7 +42,6 @@ Open http://localhost:3000.
 The fastest route — open a new PowerShell window and run:
 
 ```bash
-cd D:\trilab
 npx vercel@latest --prod
 ```
 
@@ -194,10 +205,30 @@ state plainly that the CTF is educational and client-side.
 
 ## Installation
 
+### Docker
+
+```bash
+docker compose up -d --build
+```
+
+Open http://localhost:3000. The image is built in three stages and the runtime
+stage runs as a non-root user with no source, dev dependencies or flag authoring
+file inside it. No environment variables, database or external services are
+needed.
+
+To build and run without compose:
+
+```bash
+docker build -t trace5 .
+docker run --rm -p 3000:3000 trace5
+```
+
+### Node.js
+
 Requires Node.js 18.17+ (developed and verified on Node 24).
 
 ```bash
-cd trilab
+cd trace5
 npm install
 npm run dev
 ```
@@ -212,8 +243,32 @@ npm run build        # production build
 npm start            # serve the production build
 npm run lint         # ESLint (next/core-web-vitals + next/typescript)
 npm run typecheck    # tsc --noEmit
-npm run gen:digests  # regenerate flag digests from scripts/flags.json
+npm run test         # self-test suite (no browser required)
+npm run verify       # lint + typecheck + test + build
+npm run gen:digests  # regenerate flag digests (needs the authoring file, see below)
 ```
+
+### The flag authoring file
+
+`scripts/flags.json` is the human-readable list of all 28 answers used to
+generate the shipped digests. It is **gitignored** and excluded from the Docker
+build context, so the answers are not published with the code. Only the digests in
+`src/lib/data/flag-digests.json` ship with the app.
+
+It was committed in earlier revisions of this repository, so the answers remain
+visible in that history. These are training answers for a deliberately vulnerable
+practice environment, so nothing sensitive is exposed; the file is now kept out
+of the working tree to avoid re-publishing it.
+
+If you clone the repo and want to run `npm run gen:digests` or the flag-related
+assertions in `npm run test`, create the file yourself in the format:
+
+```json
+{ "L1C1": "FLAG{YOUR_ANSWER}", "L1C2": "FLAG{YOUR_ANSWER}" }
+```
+
+The self-test detects its absence and skips the authoring-only checks, so a
+fresh clone runs the full suite successfully without it.
 
 ---
 

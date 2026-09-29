@@ -1,0 +1,30 @@
+# Keep the build context small and prevent host artefacts leaking into the image.
+
+# dependencies / build output
+node_modules
+.next
+out
+build
+*.tsbuildinfo
+next-env.d.ts
+
+# the plaintext flag authoring source must never enter the build context
+scripts/flags.json
+
+# local tooling and docs that the image does not need
+.git
+.gitignore
+.github
+.vercel
+.DS_Store
+.self-test
+*.log
+.env
+.env.*
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+README.md
+ANALYSIS.md
+PUSH-TO-GITHUB.ps1

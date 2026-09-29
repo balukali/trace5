@@ -1,0 +1,29 @@
+# TRACE//5 — local run
+#
+#   docker compose up -d --build     start on http://localhost:3000
+#   docker compose logs -f app       tail logs
+#   docker compose down              stop
+#   docker compose down -v           stop and delete the volume
+#
+# No environment variables, database or external services are required.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trace5:latest
+    container_name: trace5
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

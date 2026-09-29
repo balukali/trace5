@@ -8,7 +8,8 @@
  * modules are transpiled in-memory with the TypeScript compiler that ships with
  * the project, so the code under test is exactly the code the app ships.
  */
-import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -94,30 +95,54 @@ console.log("\nTRACE//5 self-test\n");
 
 // ------------------------------------------------------------------ flags
 console.log("[1] Flag digests");
-const flags = JSON.parse(readFileSync(join(root, "scripts/flags.json"), "utf8"));
-const digests = JSON.parse(readFileSync(join(root, "src/lib/data/flag-digests.json"), "utf8"));
-const ids = Object.keys(flags);
-check("28 flags defined", ids.length === 28, `got ${ids.length}`);
+const digestsRaw = JSON.parse(readFileSync(join(root, "src/lib/data/flag-digests.json"), "utf8"));
+// scripts/flags.json is the local authoring source and is deliberately
+// gitignored, so a fresh clone will not have it. Fall back to the shipped
+// digests so the suite still runs, and only run the authoring checks when the
+// file is present.
+const flagsPath = join(root, "scripts/flags.json");
+const hasAuthoringFile = existsSync(flagsPath);
+const flags = hasAuthoringFile
+  ? JSON.parse(readFileSync(flagsPath, "utf8"))
+  : Object.fromEntries(Object.keys(digestsRaw).map((id) => [id, ""]));
+const digests = digestsRaw;
+const ids = Object.keys(digests);
+if (!hasAuthoringFile) {
+  console.log("      (scripts/flags.json absent - local authoring file is gitignored)");
+}
+check("28 digests shipped", ids.length === 28, `got ${ids.length}`);
 check("every flag has a digest", ids.every((id) => typeof digests[id] === "string"));
 check("digests are unique", new Set(Object.values(digests)).size === ids.length);
-check(
-  "all flags match FLAG{UPPER_SNAKE}",
-  ids.every((id) => /^FLAG\{[A-Z0-9_]+\}$/.test(flags[id])),
-);
+if (hasAuthoringFile) {
+  check(
+    "all flags match FLAG{UPPER_SNAKE}",
+    ids.every((id) => /^FLAG\{[A-Z0-9_]+\}$/.test(flags[id])),
+  );
+}
 
 const { digestFlag, verifyFlagDigest, normalizeFlag } = await load("src/lib/flag-digest.ts");
-check(
-  "runtime digest matches generated digest for every flag",
-  ids.every((id) => digestFlag(id, flags[id]) === digests[id]),
-);
-check("correct flag verifies", ids.every((id) => verifyFlagDigest(id, flags[id], digests[id])));
-check(
-  "wrong flag does not verify",
-  ids.every((id) => !verifyFlagDigest(id, "FLAG{WRONG}", digests[id])),
-);
-check("flag is case-insensitive", verifyFlagDigest("L1F", flags.L1F.toLowerCase(), digests.L1F));
-check("flag tolerates spaces", verifyFlagDigest("L1F", `  ${flags.L1F}  `, digests.L1F));
+if (hasAuthoringFile) {
+  check(
+    "runtime digest matches generated digest for every flag",
+    ids.every((id) => digestFlag(id, flags[id]) === digests[id]),
+  );
+  check("correct flag verifies", ids.every((id) => verifyFlagDigest(id, flags[id], digests[id])));
+  check(
+    "wrong flag does not verify",
+    ids.every((id) => !verifyFlagDigest(id, "FLAG{WRONG}", digests[id])),
+  );
+  check("flag is case-insensitive", verifyFlagDigest("L1F", flags.L1F.toLowerCase(), digests.L1F));
+  check("flag tolerates spaces", verifyFlagDigest("L1F", `  ${flags.L1F}  `, digests.L1F));
+}
 check("normalize collapses whitespace", normalizeFlag(" a  b ") === "A B");
+check(
+  "digest is deterministic",
+  digestFlag("L1F", "FLAG{SAMPLE}") === digestFlag("L1F", "FLAG{SAMPLE}"),
+);
+check(
+  "challenge id is salted into the digest",
+  digestFlag("L1F", "FLAG{SAMPLE}") !== digestFlag("L2F", "FLAG{SAMPLE}"),
+);
 
 // -------------------------------------------------------------- lab data
 console.log("\n[2] Lab and challenge data");
@@ -327,20 +352,25 @@ check(
 
 const flagLab1 = labs[0].challenges.find((c) => c.id === "L1C2");
 check(
-  "flag: correct flag accepted",
-  validateSubmission(flagLab1, { kind: "flag", value: flags.L1C2 }, withEvidence(flagLab1)).status ===
-    "correct",
-);
-check(
   "flag: wrong flag rejected",
   validateSubmission(flagLab1, { kind: "flag", value: "FLAG{NOPE}" }, withEvidence(flagLab1))
     .status === "incorrect",
 );
-check(
-  "flag: lowercased flag accepted",
-  validateSubmission(flagLab1, { kind: "flag", value: flags.L1C2.toLowerCase() }, withEvidence(flagLab1))
-    .status === "correct",
-);
+if (hasAuthoringFile) {
+  check(
+    "flag: correct flag accepted",
+    validateSubmission(flagLab1, { kind: "flag", value: flags.L1C2 }, withEvidence(flagLab1))
+      .status === "correct",
+  );
+  check(
+    "flag: lowercased flag accepted",
+    validateSubmission(
+      flagLab1,
+      { kind: "flag", value: flags.L1C2.toLowerCase() },
+      withEvidence(flagLab1),
+    ).status === "correct",
+  );
+}
 
 const reportChallenge = labs[4].challenges.find((c) => c.type === "report");
 const goodReport = {
@@ -624,18 +654,49 @@ const dataSource = allFiles
   .filter((f) => f.includes(`${sep}lib${sep}data${sep}`) || f.includes(`${sep}lib${sep}ctf-engine`))
   .map((f) => stripWriteUpFlags(readFileSync(f, "utf8")))
   .join("\n");
-check(
-  "no plaintext flag in challenge definitions (outside write-ups)",
-  !Object.values(flags).some((f) => dataSource.includes(f)),
-);
-check("challenge data stores flag digests instead", dataSource.includes("flagDigest"));
-check(
-  "write-up flags are the only plaintext flags in data",
-  labs.every((l) => Object.values(flags).includes(l.writeUp.flag)),
-);
-check("flags are only revealed by the lab simulators", Object.values(flags).some((f) => componentSource.includes(f)));
+if (hasAuthoringFile) {
+  check(
+    "no plaintext flag in challenge definitions (outside write-ups)",
+    !Object.values(flags).some((f) => f && dataSource.includes(f)),
+  );
+  check(
+    "write-up flags are the only plaintext flags in data",
+    labs.every((l) => Object.values(flags).includes(l.writeUp.flag)),
+  );
+  check(
+    "flags are only revealed by the lab simulators",
+    Object.values(flags).some((f) => f && componentSource.includes(f)),
+  );
+} else {
+  // Without the authoring file we can still assert the structural invariant.
+  check(
+    "no challenge definition hardcodes a FLAG{...} literal",
+    !/^\s*flag:\s*"FLAG\{/m.test(dataSource),
+  );
+}
 check("progress is stored under one namespaced key", allSource.includes("trace5.progress.v1"));
 check("storage access is wrapped in try/catch", /try\s*\{[\s\S]{0,200}localStorage\.setItem/.test(allSource));
+
+// The plaintext authoring file must never be tracked by git, and must never
+// reach the Docker build context. Both are enforced so the answers cannot be
+// published by accident.
+console.log("\n[13] Flag authoring file is not published");
+const trackedFiles = execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
+  .split(/\r?\n/)
+  .filter(Boolean);
+check(
+  "scripts/flags.json is not tracked by git",
+  !trackedFiles.includes("scripts/flags.json"),
+);
+const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+check("scripts/flags.json is gitignored", /^scripts\/flags\.json$/m.test(gitignore));
+const dockerignore = join(root, ".dockerignore");
+if (existsSync(dockerignore)) {
+  check(
+    "scripts/flags.json is excluded from the Docker build context",
+    /^scripts\/flags\.json$/m.test(readFileSync(dockerignore, "utf8")),
+  );
+}
 
 
 

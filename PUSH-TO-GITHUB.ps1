@@ -1,16 +1,18 @@
 # TRACE//5 — one-command GitHub push helper (Windows PowerShell)
 #
 # HOW TO USE
-#   1. Create the empty repo on GitHub first:  https://github.com/new
-#      (name: trace5, leave every checkbox UNCHECKED)
-#   2. Come back to this folder and double-click  PUSH-TO-GITHUB.ps1
-#      or run in PowerShell:  .\PUSH-TO-GITHUB.ps1
+#   1. Run in PowerShell:  .\PUSH-TO-GITHUB.ps1
+#   (the remote below is already set to your fork, so no manual setup is needed)
 #
 # If PowerShell blocks the script, run this once first:
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+#
+# NOTE: scripts/flags.json is the plaintext flag authoring file. It is
+# gitignored, so this helper will never commit or push it.
 
 $ErrorActionPreference = 'Stop'
-$repoUrl = 'https://github.com/Anushri06-CH/trace5.git'
+# Your fork. Change this only if you fork the project again.
+$repoUrl = 'https://github.com/balukali/trace5.git'
 
 # Make sure git is reachable (it is installed but not on PATH by default here).
 $gitDir = 'C:\Program Files\Git\cmd'
@@ -76,7 +78,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ''
     Write-Host '  SUCCESS - your code is on GitHub.' -ForegroundColor Green
     Write-Host ''
-    Write-Host "  Repo URL : https://github.com/Anushri06-CH/trace5" -ForegroundColor White
+    Write-Host "  Repo URL : https://github.com/balukali/trace5" -ForegroundColor White
     Write-Host ''
     Write-Host '  NEXT STEP - go live on Vercel:' -ForegroundColor Cyan
     Write-Host '    1. Open https://vercel.com/new' -ForegroundColor White
